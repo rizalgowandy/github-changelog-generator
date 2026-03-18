@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "delegate"
-require "github_changelog_generator/helper"
+require_relative "helper"
 
 module GitHubChangelogGenerator
   # This class wraps Options, and knows a list of known options. Others options
@@ -145,7 +145,17 @@ module GitHubChangelogGenerator
     #
     # @return [Hash] The GitHub `:token` key is censored in the output.
     def censored_values
-      values.clone.tap { |opts| opts[:token] = opts[:token].nil? ? "No token used" : "hidden value" }
+      values.clone.tap { |opts| opts[:token] = censored_token(opts[:token]) }
+    end
+
+    def censored_token(opts_token)
+      if !opts_token.nil?
+        "Used token from options"
+      elsif ENV["CHANGELOG_GITHUB_TOKEN"]
+        "Used token from environment variable"
+      else
+        "No token used"
+      end
     end
 
     def unsupported_options

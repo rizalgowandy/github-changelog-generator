@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require "github_changelog_generator/octo_fetcher"
-require "github_changelog_generator/generator/generator_fetcher"
-require "github_changelog_generator/generator/generator_processor"
-require "github_changelog_generator/generator/generator_tags"
-require "github_changelog_generator/generator/entry"
-require "github_changelog_generator/generator/section"
+require_relative "../octo_fetcher"
+require_relative "generator_fetcher"
+require_relative "generator_processor"
+require_relative "generator_tags"
+require_relative "entry"
+require_relative "section"
 
 module GitHubChangelogGenerator
   # Default error for ChangelogGenerator
@@ -149,7 +149,12 @@ module GitHubChangelogGenerator
 
       fetch_events_for_issues_and_pr
       detect_actual_closed_dates(@issues + @pull_requests)
-      add_first_occurring_tag_to_prs(@sorted_tags, @pull_requests)
+      prs_left = add_first_occurring_tag_to_prs(@sorted_tags, @pull_requests)
+
+      # PRs in prs_left will be untagged, not in release branch, and not
+      # rebased. They should not be included in the changelog as they probably
+      # have been merged to a branch other than the release branch.
+      @pull_requests -= prs_left
       nil
     end
 

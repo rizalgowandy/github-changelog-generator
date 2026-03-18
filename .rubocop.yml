@@ -1,8 +1,10 @@
 inherit_from: .rubocop_todo.yml
-require: rubocop-performance
+plugins: rubocop-performance
 
 AllCops:
-  TargetRubyVersion: 2.5
+  TargetRubyVersion: 3.0
+  NewCops: disable
+  SuggestExtensions: false
   DisplayCopNames: true
   DisplayStyleGuide: true
   Exclude:
@@ -40,8 +42,8 @@ Metrics/MethodLength:
   Enabled: false
 
 Metrics/ModuleLength:
-    Exclude:
-      - 'spec/**/*'
+  Exclude:
+    - 'spec/**/*'
 
 Naming/FileName:
   Exclude:
@@ -50,7 +52,7 @@ Naming/FileName:
 # TODOS
 # Offense count: 14
 Metrics/AbcSize:
-  Enabled: false  
+  Enabled: false
 
 # Offense count: 10
 Style/Documentation:

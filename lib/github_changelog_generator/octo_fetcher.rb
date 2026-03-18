@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "tmpdir"
-require "set"
 require "async"
 require "async/barrier"
 require "async/semaphore"
@@ -59,7 +58,7 @@ module GitHubChangelogGenerator
         end
 
         builder.use Octokit::Response::RaiseError
-        builder.adapter :async_http
+        builder.adapter Faraday.default_adapter
       end
     end
 
@@ -209,7 +208,8 @@ Make sure, that you push tags to remote repo via 'git push --tags'"
     # @param [Array] issues
     # @return [Void]
     def fetch_events_async(issues)
-      i = 0
+      fetched_count = 0
+      mutex = Mutex.new
       # Add accept option explicitly for disabling the warning of preview API.
       preview = { accept: Octokit::Preview::PREVIEW_TYPES[:project_card_events] }
 
@@ -226,8 +226,8 @@ Make sure, that you push tags to remote repo via 'git push --tags'"
               issue["events"].concat(new_event)
             end
             issue["events"] = issue["events"].map { |event| stringify_keys_deep(event.to_hash) }
-            print_in_same_line("Fetching events for issues and PR: #{i + 1}/#{issues.count}")
-            i += 1
+            current = mutex.synchronize { fetched_count += 1 }
+            print_in_same_line("Fetching events for issues and PR: #{current}/#{issues.count}")
           end
         end
 
@@ -237,7 +237,7 @@ Make sure, that you push tags to remote repo via 'git push --tags'"
         print_empty_line
       end
 
-      Helper.log.info "Fetching events for issues and PR: #{i}"
+      Helper.log.info "Fetching events for issues and PR: #{fetched_count}"
     end
 
     # Fetch comments for PRs and add them to "comments"
@@ -346,7 +346,13 @@ Make sure, that you push tags to remote repo via 'git push --tags'"
     # @param [String] name
     # @return [Array<String>]
     def commits_in_branch(name)
-      @branches ||= client.branches(user_project).map { |branch| [branch[:name], branch] }.to_h
+      @branches ||= begin
+        all_branches = {}
+        iterate_pages(client, "branches") do |branches|
+          branches.each { |branch| all_branches[branch[:name]] = branch }
+        end
+        all_branches
+      end
 
       if (branch = @branches[name])
         commits_in_tag(branch[:commit][:sha])
@@ -381,9 +387,15 @@ Make sure, that you push tags to remote repo via 'git push --tags'"
       queue = [current]
       while queue.any?
         commit = queue.shift
-        # If we've already processed this sha, just grab it's parents from the cache
         if @commits_in_tag_cache.key?(commit[:sha])
+          # If we've already processed this sha in a previous run, just grab
+          # its parents from the cache
           shas.merge(@commits_in_tag_cache[commit[:sha]])
+        elsif shas.include?(commit[:sha])
+          # If we've already processed this sha in the current run, stop there
+          # for the current commit because its parents have already been
+          # queued/processed. Jump to the next queued commit.
+          next
         else
           shas.add(commit[:sha])
           commit[:parents].each do |p|
